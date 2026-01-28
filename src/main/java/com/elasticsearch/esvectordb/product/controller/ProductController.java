@@ -4,9 +4,13 @@ import com.elasticsearch.esvectordb.product.entity.Product;
 import com.elasticsearch.esvectordb.product.service.ProductChatService;
 import com.elasticsearch.esvectordb.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.publisher.Flux;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -29,6 +33,38 @@ public class ProductController {
     public ResponseEntity<ChatResponse> chat(@RequestBody ChatRequest request) {
         var response = productChatService.chat(request.message());
         return ResponseEntity.ok(new ChatResponse(response.message()));
+    }
+
+    // MediaType.TEXT_EVENT_STREAM_VALUE: SSE 응답 타입 설정
+    // SseEmitter: Spring의 SSE 지원 클래스
+    // SseEmitter(0L): 타임아웃 없음 (무제한 대기)
+    // emitter.send(): 클라이언트에게 실시간으로 데이터 전송
+    @GetMapping(value="/chat/stream",produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chat(@RequestParam String message) {
+        SseEmitter emitter = new SseEmitter(0L);
+
+        // ChatClient를 통해 스트림(Flux) 요청
+        Flux<String> response = productChatService.chatStream(message);
+
+        // 스트림 구독 및 전송
+        response.subscribe(
+                r -> {
+                    try {
+                        // 토큰 텍스트 추출
+                        if (r != null) {
+                            emitter.send(SseEmitter.event()
+                                    .name("message")
+                                    .data(r));
+                        }
+                    } catch (IOException e) {
+                        emitter.completeWithError(e);
+                    }
+                },
+                error -> emitter.completeWithError(error), // 에러 발생 시
+                () -> emitter.complete() // 스트림 종료 시
+        );
+
+        return emitter;
     }
 
     // ==================== READ ====================

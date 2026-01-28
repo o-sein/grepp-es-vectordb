@@ -3,6 +3,7 @@ package com.elasticsearch.esvectordb.product.service;
 import com.elasticsearch.esvectordb.product.tool.ProductSearchTool;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 @Service
 public class ProductChatService {
@@ -43,5 +44,16 @@ public class ProductChatService {
     }
 
     public record ChatResponse(String message) {
+    }
+
+    // Flux<String>: Reactor의 비동기 스트림 타입 반환
+    // .stream(): 응답을 스트림으로 받아 실시간으로 전송
+    public Flux<String> chatStream(String userMessage) {
+        return chatClient.prompt()
+                .system(SYSTEM_PROMPT)
+                .user(userMessage)
+                .tools(productSearchTool)
+                .stream()
+                .content();
     }
 }
