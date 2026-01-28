@@ -1,6 +1,7 @@
 package com.elasticsearch.esvectordb.product.controller;
 
 import com.elasticsearch.esvectordb.product.entity.Product;
+import com.elasticsearch.esvectordb.product.service.ProductChatService;
 import com.elasticsearch.esvectordb.product.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -14,12 +15,20 @@ import java.util.List;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductChatService productChatService;
 
     // ==================== CREATE ====================
     @PostMapping
     public ResponseEntity<Product> create(@RequestBody CreateRequest request) {
         Product product = productService.create(request.name(), request.keywords());
         return ResponseEntity.ok(product);
+    }
+
+    // ==================== CHAT ====================
+    @PostMapping("/chat")
+    public ResponseEntity<ChatResponse> chat(@RequestBody ChatRequest request) {
+        var response = productChatService.chat(request.message());
+        return ResponseEntity.ok(new ChatResponse(response.message()));
     }
 
     // ==================== READ ====================
@@ -82,4 +91,6 @@ public class ProductController {
             if (k <= 0) k = 10;
         }
     }
+    public record ChatRequest(String message) {}
+    public record ChatResponse(String message) {}
 }
