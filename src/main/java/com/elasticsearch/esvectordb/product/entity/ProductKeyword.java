@@ -1,5 +1,6 @@
 package com.elasticsearch.esvectordb.product.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -16,6 +17,7 @@ public class ProductKeyword {
     @ManyToOne(fetch = FetchType.LAZY)
     @Setter
     @Getter
+    @JsonIgnore // JSON 직렬화 시 순환 참조 방지
     private Product product;
 
     @Column
