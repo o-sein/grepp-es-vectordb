@@ -2,7 +2,6 @@ package com.elasticsearch.esvectordb.product.controller;
 
 import com.elasticsearch.esvectordb.TestcontainersConfiguration;
 import com.elasticsearch.esvectordb.product.entity.Product;
-import com.elasticsearch.esvectordb.product.repository.ProductDocumentRepository;
 import com.elasticsearch.esvectordb.product.repository.ProductRepository;
 import com.elasticsearch.esvectordb.product.service.ProductService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,12 +40,8 @@ class ProductControllerTest {
     @Autowired
     private ProductRepository productRepository;
 
-    @Autowired
-    private ProductDocumentRepository productDocumentRepository;
-
     @BeforeEach
     void setUp() {
-        productDocumentRepository.deleteAll();
         productRepository.deleteAll();
     }
 

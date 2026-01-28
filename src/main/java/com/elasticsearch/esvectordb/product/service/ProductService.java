@@ -1,24 +1,18 @@
 package com.elasticsearch.esvectordb.product.service;
 
-import co.elastic.clients.elasticsearch._types.KnnSearch;
-import com.elasticsearch.esvectordb.product.document.ProductDocument;
 import com.elasticsearch.esvectordb.product.entity.Product;
-import com.elasticsearch.esvectordb.product.repository.ProductDocumentRepository;
 import com.elasticsearch.esvectordb.product.repository.ProductRepository;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.elasticsearch.client.elc.ElasticsearchTemplate;
-import org.springframework.data.elasticsearch.client.elc.NativeQuery;
-import org.springframework.data.elasticsearch.core.SearchHit;
-import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Score;
+import org.springframework.data.domain.ScoringFunction;
+import org.springframework.data.domain.Vector;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 @Service
@@ -26,32 +20,20 @@ public class ProductService {
     @Autowired
     private ProductRepository productRepository;
     @Autowired
-    private ProductDocumentRepository productDocumentRepository;
-
-    // EmbeddingModel: Spring AI의 임베딩 모델 (키워드를 벡터로 변환)
-    @Autowired
     private EmbeddingModel embeddingModel;
-    @Autowired
-    private ElasticsearchTemplate elasticsearchTemplate;
 
     @Transactional
-    protected Product _create(String name, List<String> keywords){
+    public Product create(String name, List<String> keywords) {
         Product product = new Product();
         product.setName(name);
-        keywords.stream().forEach(k->product.addKeyword(k));
-        return productRepository.save(product);
-    }
+        keywords.forEach(product::addKeyword);
 
-    public Product create(String name, List<String> keywords){
-        Product product = this._create(name, keywords);
-        ProductDocument doc = new ProductDocument();
         if (!keywords.isEmpty()) {
             List<float[]> embeddings = embeddingModel.embed(keywords);
-            doc.setEmbedding(calculateAverage(embeddings));
+            product.setEmbedding(calculateAverage(embeddings));
         }
-        doc.setId(product.getId());
-        productDocumentRepository.save(doc);
-        return product;
+
+        return productRepository.save(product);
     }
 
     public Optional<Product> findById(Long id) {
@@ -60,10 +42,6 @@ public class ProductService {
 
     public List<Product> findAll() {
         return StreamSupport.stream(productRepository.findAll().spliterator(), false).toList();
-    }
-
-    public Optional<ProductDocument> findDocumentById(Long id) {
-        return productDocumentRepository.findById(id);
     }
 
     @Transactional
@@ -75,28 +53,27 @@ public class ProductService {
         product.getKeywords().clear();
         keywords.forEach(product::addKeyword);
 
-        Product savedProduct = productRepository.save(product);
-
-        ProductDocument doc = productDocumentRepository.findById(id)
-                .orElse(new ProductDocument());
-        doc.setId(savedProduct.getId());
-
         if (!keywords.isEmpty()) {
             List<float[]> embeddings = embeddingModel.embed(keywords);
-            doc.setEmbedding(calculateAverage(embeddings));
+            product.setEmbedding(calculateAverage(embeddings));
+        } else {
+            product.setEmbedding(null);
         }
 
-        productDocumentRepository.save(doc);
-        return savedProduct;
+        return productRepository.save(product);
     }
 
     @Transactional
     public void delete(Long id) {
         productRepository.deleteById(id);
-        productDocumentRepository.deleteById(id);
     }
 
-    // KnnSearch: Elasticsearch의 K-Nearest Neighbors 검색 API
+    /**
+     * Vector.of(): float 배열을 Vector 객체로 변
+     * Score.of(maxScore, scoringFunction): 최대 점수와 스코어링 함수 설정
+     * ScoringFunction.euclidean(): 유클리드 거리 기반 유사도 계산
+     * Limit.of(k): 상위 k개 결과만 반환
+     */
     public List<Product> knnSearch(List<String> keywords, int k) {
         if (keywords == null || keywords.isEmpty()) {
             return List.of();
@@ -105,43 +82,15 @@ public class ProductService {
         List<float[]> embeddings = embeddingModel.embed(keywords);
         float[] queryVector = calculateAverage(embeddings);
 
-        List<ProductDocument> docs = knnSearchByVector(queryVector, "embedding", k, k * 2);
-        List<Long> ids = docs.stream().map(ProductDocument::getId).toList();
-
-        // KNN 결과 순서대로 정렬
-        Map<Long, Product> productMap = StreamSupport
-                .stream(productRepository.findAllById(ids).spliterator(), false)
-                .collect(Collectors.toMap(Product::getId, p -> p));
-
-        return ids.stream()
-                .map(productMap::get)
-                .filter(Objects::nonNull)
+        return productRepository.searchByEmbeddingNear(
+                        Vector.of(queryVector), // 검색 쿼리 벡터
+                        Score.of(Double.MAX_VALUE, ScoringFunction.euclidean()), // 유클리드 거리 기반 스코어링
+                        Limit.of(k)) // 최대 k개 결과 반환
+                .stream()
+                .map(result -> result.getContent())
                 .toList();
     }
 
-    // numCandidates: 검색 후보 수 (정확도와 성능 트레이드오프)
-    public List<ProductDocument> knnSearchByVector(float[] queryVector, String field, int k, int numCandidates) {
-        List<Float> vectorList = toFloatList(queryVector);
-
-        KnnSearch knnSearch = KnnSearch.of(knn -> knn
-                .queryVector(vectorList)
-                .field(field)
-                .k(k)
-                .numCandidates(numCandidates)
-        );
-
-        NativeQuery query = NativeQuery.builder()
-                .withKnnSearches(knnSearch)
-                .build();
-
-        SearchHits<ProductDocument> searchHits = elasticsearchTemplate.search(query, ProductDocument.class);
-        return searchHits.getSearchHits().stream()
-                .map(SearchHit::getContent)
-                .toList();
-    }
-
-    // 상품의 키워드를 기반으로 유사 상품 검색
-    // 자기 자신은 결과에서 제외
     @Transactional(readOnly = true)
     public List<Product> findSimilarProducts(Long productId, int k) {
         Product product = productRepository.findById(productId)
@@ -158,15 +107,6 @@ public class ProductService {
                 .toList();
     }
 
-    private List<Float> toFloatList(float[] array) {
-        List<Float> list = new java.util.ArrayList<>(array.length);
-        for (float v : array) {
-            list.add(v);
-        }
-        return list;
-    }
-
-    // calculateAverage(): 여러 키워드 벡터의 평균을 계산하여 상품 벡터 생성
     private float[] calculateAverage(List<float[]> vectors) {
         if (vectors.isEmpty()) return new float[0];
 
@@ -186,3 +126,15 @@ public class ProductService {
         return sum;
     }
 }
+
+/**
+ * 주요 변경사항:
+ * ProductDocumentRepository 제거 - 더 이상 별도 저장소 불필요
+ * ElasticsearchTemplate 제거 - Spring Data JPA 기본 기능 사용
+ * create(): embedding을 Product 엔티티에 직접 저장
+ * update(): 키워드가 비어있으면 embedding을 null로 설정
+ * delete(): Elasticsearch 문서 삭제 로직 제거 (자동으로 함께 삭제)
+ * knnSearch(): Spring Data의 searchByEmbeddingNear() 메서드 사용
+ * knnSearchByVector(), toFloatList() 메서드 제거 - 더 이상 불필요
+ * findDocumentById() 메서드 제거
+ */

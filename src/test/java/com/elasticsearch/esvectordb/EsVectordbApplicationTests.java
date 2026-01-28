@@ -1,12 +1,9 @@
 package com.elasticsearch.esvectordb;
 
-import com.elasticsearch.esvectordb.product.document.ProductDocument;
 import com.elasticsearch.esvectordb.product.entity.Product;
-import com.elasticsearch.esvectordb.product.repository.ProductDocumentRepository;
 import com.elasticsearch.esvectordb.product.repository.ProductRepository;
 import com.elasticsearch.esvectordb.product.service.ProductService;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,9 +26,6 @@ class EsVectordbApplicationTests {
     private ProductRepository productRepository;
 
     @Autowired
-    private ProductDocumentRepository productDocumentRepository;
-
-    @Autowired
     private ProductService productService;
 
     @Test
@@ -40,8 +34,6 @@ class EsVectordbApplicationTests {
 
     @BeforeEach
     void setUp() {
-        // 이전 테스트 데이터 정리
-        productDocumentRepository.deleteAll();
         productRepository.deleteAll();
     }
 
@@ -60,13 +52,17 @@ class EsVectordbApplicationTests {
     }
 
     @Test
-    @DisplayName("Elasticsearch 테스트")
+    @DisplayName("Vector embedding 테스트")
     void t2(){
         assertDoesNotThrow(()->{
-            ProductDocument doc = new ProductDocument();
-            doc.setEmbedding(new float[384]);
-            doc.setId(1L);
-            productDocumentRepository.findAll();
+            Product product = new Product();
+            product.setName("테스트 상품");
+            product.setEmbedding(new float[384]);
+            productRepository.save(product);
+
+            Optional<Product> found = productRepository.findById(product.getId());
+            assertTrue(found.isPresent());
+            assertNotNull(found.get().getEmbedding());
         });
     }
 
@@ -85,10 +81,10 @@ class EsVectordbApplicationTests {
         assertEquals(name, product.getName());
         assertEquals(3, product.getKeywords().size());
 
-        // Elasticsearch에도 저장되었는지 확인
-        Optional<ProductDocument> doc = productService.findDocumentById(product.getId());
-        assertTrue(doc.isPresent());
-        assertEquals(product.getId(), doc.get().getId());
+        // embedding이 저장되었는지 확인
+        Optional<Product> found = productService.findById(product.getId());
+        assertTrue(found.isPresent());
+        assertNotNull(found.get().getEmbedding());
     }
 
     @Test
@@ -120,9 +116,10 @@ class EsVectordbApplicationTests {
         assertEquals("아이패드", updated.getName());
         assertEquals(3, updated.getKeywords().size());
 
-        // Elasticsearch 문서도 업데이트 확인
-        Optional<ProductDocument> doc = productService.findDocumentById(updated.getId());
-        assertTrue(doc.isPresent());
+        // embedding도 업데이트 확인
+        Optional<Product> found = productService.findById(updated.getId());
+        assertTrue(found.isPresent());
+        assertNotNull(found.get().getEmbedding());
     }
 
     @Test
@@ -138,9 +135,6 @@ class EsVectordbApplicationTests {
         // then
         Optional<Product> found = productService.findById(id);
         assertFalse(found.isPresent());
-
-        Optional<ProductDocument> doc = productService.findDocumentById(id);
-        assertFalse(doc.isPresent());
     }
 
     @Test

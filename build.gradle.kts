@@ -42,10 +42,12 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     // database
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.springframework.boot:spring-boot-starter-data-elasticsearch")
     // spring ai
     implementation("org.springframework.ai:spring-ai-starter-model-openai")
     implementation("org.springframework.ai:spring-ai-starter-model-ollama")
+    // hibernate-vector for pgvector support
+    // hibernate-vector: pgvector 타입을 Hibernate에서 지원하기 위한 의존성 추가
+    implementation("org.hibernate.orm:hibernate-vector")
     compileOnly("org.projectlombok:lombok")
     runtimeOnly("org.postgresql:postgresql")
     annotationProcessor("org.projectlombok:lombok")
@@ -54,7 +56,6 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.testcontainers:testcontainers-postgresql")
-    testImplementation("org.testcontainers:testcontainers-elasticsearch")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
