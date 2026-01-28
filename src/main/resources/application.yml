@@ -23,3 +23,4 @@ spring:
       embedding:
         options:
           dimensions: 384
+          model: text-embedding-3-small # 기본 text-embedding-ada-002에서 모델 명시 추가
